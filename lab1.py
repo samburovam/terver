@@ -4,6 +4,7 @@ from collections import Counter
 from matplotlib import pyplot as plt
 import pandas as pd
 import numpy as np
+from math import gamma
 
 
 l = float(input("Интенсивность потока машин: "))
@@ -145,3 +146,74 @@ plt.plot(x, F, label="Теоретическая фр")
 plt.plot(x, F_v, label="Выборочная фр")
 plt.legend(loc="best")
 plt.show()
+
+
+# 3 ЧАСТЬ
+
+print("Введите количество интервалов k")
+k_ = int(input())
+print("Введите границы интервалов друг за другом")
+intervals = []
+inputed = input()
+inputed = str.split(inputed)
+for i in range(len(inputed)):
+    if (i + 1) % 2 == 0:
+        intervals.append((inputed[i - 1], inputed[i]))
+print(intervals)
+
+x = x[1:]
+
+# print(intervals[2])
+# print(list(range(3)))
+
+deltas = []
+
+
+def countQj(j):
+    # print(j)
+    interval = list(intervals[j])
+    # print(interval)
+    if interval[0] == "-inf":
+        interval[0] = x[0]
+    if interval[1] == "inf":
+        interval[1] = x[-1] + 1
+
+    ai = x[int(interval[0]) : int(interval[1])]
+    deltas.append(len(ai))
+    qj = [distr[x] for x in ai]
+    # print(qj)
+    return sum(qj)
+
+
+qi = []
+for i in range(k_):
+    qi.append(countQj(i))
+print(qi)
+print(deltas)
+
+print("Введите уровень значимости a:")
+a = float(input())
+
+R0 = 0
+for i in range(k_):
+    R0 += ((deltas[i] - len(x) * qi[i]) ** 2) / (len(x) * qi[i])
+print(R0)
+
+df = k_ - 1
+
+F_hi = 0
+for i in range(k_):
+    F_hi += (
+        ((R0 * ((i) / k_)) ** (df / 2 - 1)) * exp(-R0 * i / (k_ * 2))
+        + ((R0 * ((i + 1) / k_)) ** (df / 2 - 1)) * exp(-R0 * (i + 1) / (k_ * 2))
+    ) * (R0 / (2 * k_))
+
+F_hi = F_hi * (1 / ((2 ** df) * gamma(df / 2)))
+
+F_hi = 1 - F_hi
+
+print(F_hi)
+if F_hi < a:
+    print("FALSE")
+else:
+    print("TRUE")
