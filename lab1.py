@@ -4,16 +4,18 @@ from collections import Counter
 from matplotlib import pyplot as plt
 import pandas as pd
 import numpy as np
-from math import gamma
-
+from math import gamma, ceil
+import scipy.integrate as integrate
 
 l = float(input("Интенсивность потока машин: "))
 t = float(input("Время: "))
 from math import exp, factorial
 
-experiments = 1000
+experiments = 100000
 results = []
 distr = {}
+x_v = []
+p_v = []
 
 # рандомим цифру
 # стартуем форик в котором поочередно по формуле с е считаем вероятности. Если рандомная циферка больше, то идем на следующую итерацию
@@ -24,18 +26,28 @@ for i in range(experiments):
     u = random()
     k = 0
     while u > p:
+        k += 1
         p_ = t ** k * l ** k * exp(-l * t) / factorial(k)
         p += p_
-        k += 1
     results.append(k)
+
 
 summary = dict(Counter(results))
 
 print(f"After {experiments} experiments:")
 for k in sorted(summary.items()):
+    x_v.append(k[0])
+    p_v.append(k[1] / experiments)
     print(
         str(k[0]) + " cars,", str(k[1]) + " times,", str(k[1] * 100 / experiments) + "%"
     )
+x_v = np.array(x_v)
+p_v = np.array(p_v)
+print(p_v)
+
+
+def Poisson(x):
+    return l ** x * t ** x * exp(-l * t) / factorial(x)
 
 
 # 2 ЧАСТЬ
@@ -58,49 +70,44 @@ for k in sorted(summary.items()):
 
 F = []
 F.append(0)
-for i in x:
+for i in x_v:
     F.append(l ** i * t ** i * exp(-l * t) / factorial(i) + F[-1])
 
 # Выборочное среднее
 x_ = 0
-for i in x:
+for i in results:
     x_ += i
-x_ = x_ / len(x)
+x_ = x_ / len(results)
 
 
 # Математическое ожидание
-E = 0
-for i in range(len(x)):
-    E += x[i] * p[i]
-
+E = l * t
 
 # |E-x_|
 E_x_ = abs(E - x_)
 
 # Дисперсия
-E2 = 0
-for i in range(len(x)):
-    E2 += x[i] * x[i] * p[i]
-D = E2 - E * E
+D = l * t
 
 # Выборочная дисперсия
 S2 = 0
-for i in range(len(x)):
-    S2 += (x[i] - x_) ** 2
-S2 = S2 / len(x)
+for i in range(len(results)):
+    S2 += (results[i] - x_) ** 2
+S2 = S2 / len(results)
 
 
 # D-S2
 D_S2 = abs(D - S2)
 
 # R
-R = x[-1] - x[0]
+R = x_v[-1] - x_v[0]
 
 # Me
+n = len(results)
 if n % 2 == 0:
-    Me = (x[int(n / 2)] + x[int(n / 2 + 1)]) / 2
+    Me = (results[int(n / 2)] + results[int(n / 2 + 1)]) / 2
 else:
-    Me = x[int((n - 1) / 2 + 1)]
+    Me = results[int((n - 1) / 2 + 1)]
 
 # Мера расхождения
 DD = 0
@@ -109,16 +116,14 @@ for i in range(len(F)):
     DD_.append(abs(F[i] - F_v[i]))
 DD = max(DD_)
 
-F_ = []
-for k in range(len(summary)):
-    F_.append(abs(sorted(summary.items())[k][1] / experiments - p[k]))
-
-nj = []
-for k in range(len(summary)):
-    nj.append(sorted(summary.items())[k][1] / experiments)
-
-
-F_max = max(F_)
+# Максимальное отклонение
+maxF = 0
+imaxF = 0
+m = len(p_v)
+for i in range(m):
+    if abs(p_v[i] - p[i]) > maxF:
+        maxF = abs(p_v[i] - p[i])
+        imaxF = p_v[i]
 
 
 names = ["E", "x_", "|E-x_|", "D", "S2", "|D-S2|", "Me", "R"]
@@ -131,27 +136,27 @@ print("~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 print("Мера расхождения: ", DD)
 print("~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 table2 = pd.DataFrame()
-table2.index = x
+table2.index = x_v
 table2.index.names = ["yj"]
-table2["P({n = yj})"] = p
-table2["nj/n"] = nj
+table2["P({n = yj})"] = np.array(p)
+table2["nj/n"] = p_v / len(p_v)
 print(table2.T)
 print("~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 print("Максимальное отклонение:")
-print(F_max)
+print(maxF)
+print("В точке:")
+print(imaxF)
 
-
-xplot = x.insert(0, -1)
-plt.plot(x, F, label="Теоретическая фр")
-plt.plot(x, F_v, label="Выборочная фр")
+plt.step(x_v, F[1:], label="Теоретическая фр")
+plt.step(x_v, F_v[1:], label="Выборочная фр")
 plt.legend(loc="best")
 plt.show()
-
 
 # 3 ЧАСТЬ
 
 print("Введите количество интервалов k")
 k_ = int(input())
+
 print("Введите границы интервалов друг за другом")
 intervals = []
 inputed = input()
@@ -161,12 +166,88 @@ for i in range(len(inputed)):
         intervals.append((inputed[i - 1], inputed[i]))
 print(intervals)
 
-x = x[1:]
+
+"""
+
+def F(k):
+    sum = 0
+    for i in range(k + 1):
+        sum += Poisson(i)
+    return sum
+
+
+proms = [x / k_ for x in range(k_ + 1)]
+print(proms)
+
+ints = []
+
+for i in proms:
+    for ai in x:
+        if F(ai) < i and F(ai + 1) > i:
+            ints.append(((F(ai + 1) - F(ai)) / 2) + F(ai))
+
+print(ints)
+
+promies = []
+
+ints.insert(0, 0)
+ints.insert(len(ints), 1)
+print(ints)
+
+newints = []
+
+for i in range(len(ints)):
+    if i == 0:
+        newints.append((0, ints[1]))
+    elif i != 0 and i != len(ints) - 1:
+        newints.append((ints[i], ints[i + 1]))
+
+
+print(newints)
+
+values = []
+qis = []
+for new in newints:
+    vals = []
+    qii = 0
+    for i in range(len(x)):
+        if F(x[i]) >= new[0] and F(x[i]) < new[1]:
+            vals.append(x[i])
+            qii += p[i]
+    values.append(vals)
+    qis.append(qii)
+print(values)
+print(qis)
+
+nummies = []
+for j in values:
+    num = 0
+    for i in results:
+        if i in j:
+            num += 1
+    nummies.append(num)
+print(nummies)
+
+eta = nummies
+qi = qis
+"""
+
 
 # print(intervals[2])
 # print(list(range(3)))
+eta = []
+for m in intervals:
+    m = list(m)
+    cou = 0
+    if m[0] == "-inf":
+        m[0] = x[0]
+    if m[1] == "inf":
+        m[1] = x[-1] + 1
 
-deltas = []
+    for i in results:
+        if (i >= float(m[0])) and (i < float(m[1])):
+            cou += 1
+    eta.append(cou)
 
 
 def countQj(j):
@@ -178,42 +259,55 @@ def countQj(j):
     if interval[1] == "inf":
         interval[1] = x[-1] + 1
 
-    ai = x[int(interval[0]) : int(interval[1])]
-    deltas.append(len(ai))
-    qj = [distr[x] for x in ai]
-    # print(qj)
+    ai = x[int(ceil(float(interval[0]))) : int(ceil(float(interval[1])))]
+    print(ai)
+    qj = []
+    for e in ai:
+        qj.append(Poisson(e))
+
     return sum(qj)
 
 
 qi = []
 for i in range(k_):
     qi.append(countQj(i))
+
+
+print("Теоретические вероятности qi:")
 print(qi)
-print(deltas)
+
 
 print("Введите уровень значимости a:")
 a = float(input())
-
+print(eta)
 R0 = 0
 for i in range(k_):
-    R0 += ((deltas[i] - len(x) * qi[i]) ** 2) / (len(x) * qi[i])
+    R0 += ((eta[i] - experiments * qi[i]) ** 2) / (experiments * qi[i])
+
+print("R0 равно:")
 print(R0)
 
 df = k_ - 1
 
-F_hi = 0
-for i in range(k_):
-    F_hi += (
-        ((R0 * ((i) / k_)) ** (df / 2 - 1)) * exp(-R0 * i / (k_ * 2))
-        + ((R0 * ((i + 1) / k_)) ** (df / 2 - 1)) * exp(-R0 * (i + 1) / (k_ * 2))
-    ) * (R0 / (2 * k_))
 
-F_hi = F_hi * (1 / ((2 ** df) * gamma(df / 2)))
+def fx(x):
+    if x <= 0:
+        return 0
+    else:
+        y = 2 ** (-df / 2)
+        y = y * gamma(df / 2) ** (-1)
+        y = y * x ** (df / 2 - 1)
+        y = y * exp(-x / 2)
+        return y
 
-F_hi = 1 - F_hi
 
+F_hi = integrate.quad(fx, 0, R0)
+
+F_hi = 1.0 - float(F_hi[0])
+
+print("F_(R0) равно:")
 print(F_hi)
 if F_hi < a:
-    print("FALSE")
+    print("Гипотеза отвергается")
 else:
-    print("TRUE")
+    print("Гипотеза принимается")
